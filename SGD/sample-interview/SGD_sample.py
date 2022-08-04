@@ -1,3 +1,4 @@
+from random import sample
 import numpy as np
 import tensorflow as tf
 import matplotlib.pyplot as plt
@@ -11,79 +12,71 @@ the bare minimum of experience and understanding in the field.
 
 '''
 
-# Creating data samples
-sample_size = 1000
+# Create clearly seperable data
 
-positive_data = np.random.multivariate_normal(
-    mean = [0, 3],
-    cov = [[1,0.5], [0.5, 1]],
-    size = sample_size
+number_samples = 1000
+
+negative_samples = np.random.multivariate_normal(
+    mean = (0, 3), 
+    cov = [[1, 0.5], [0.5, 1]],
+    size = number_samples
 )
 
-negative_data = np.random.multivariate_normal(
-    mean = [3, 0],
-    cov = [[1,0.5], [0.5, 1]],
-    size = sample_size
+positive_samples = np.random.multivariate_normal(
+    mean = (3, 0),
+    # Covariance represents relative relationship between Xi & Xj
+    # Example: cov[0,1] is the covariance between x0 & x1
+    # A positive correlation --> both variables increasing or deacreaing
+    cov = [[1, 0.5], [0.5, 1]],
+    size= number_samples
 )
 
-inputs = np.vstack((negative_data, positive_data)).astype(np.float32)
-targets = np.vstack((np.zeros((sample_size, 1), dtype="float32"), np.ones((sample_size, 1), dtype="float32")))
+inputs = np.vstack((negative_samples, positive_samples)).astype(np.float32)
+targets = np.vstack((np.zeros((number_samples, 1), dtype="float32"), np.ones((number_samples, 1), dtype="float32")))
 
+# Display data for confirmation
 #plt.scatter(inputs[:, 0], inputs[:, 1], c=targets[:, 0])
 #plt.show()
 
 # Initialize weights & bias
-input_dim = 2 
+input_dim = 2
 output_dim = 1
 
-W = tf.Variable(initial_value=tf.random.uniform(shape = (input_dim, output_dim)))
-bias = tf.Variable(initial_value=tf.zeros(shape=(output_dim,)))
+W = tf.Variable(initial_value=tf.random.uniform(shape=(input_dim, output_dim)))
+b = tf.Variable(initial_value=tf.ones(shape=(output_dim, )))
 
-# Define model
+# Create a model
 def model(inputs):
-    return tf.matmul(inputs, W) + bias
+    return tf.matmul(inputs, W) + b
 
-# Defining loss function
-def loss_mse(targets, pred):
-    assert len(pred) == len(targets)
-    per_sample_losses = tf.square(targets - pred)
-    return tf.reduce_mean(per_sample_losses)
+# Define loss funciton
+def MSE_loss(pred, actual):
+    squared_loss = tf.square(actual - pred)
+    return tf.reduce_mean(squared_loss)
 
-# Training step
-def SGD_single_step(inputs, targets, learning_rate):
+# Define Optimizer
+step_size = .1
+
+def SGD_single_step(inputs, targets, step_num):
     with tf.GradientTape() as tape:
-        predictions = model(inputs)
-        loss = loss_mse(targets, predictions)
-    grad_loss_w, grad_loss_bias = tape.gradient(loss, [W, bias])
-    W.assign_sub(learning_rate * grad_loss_w)
-    bias.assign_sub(learning_rate * grad_loss_bias)
-    return loss
-
-# Repeat training step
-def SGD(inputs, targets, learning_rate, training_steps):
-    for step in range(training_steps):
-        loss = SGD_single_step(inputs, targets, learning_rate)
-        print(f"Loss at step {step}: {loss}")
-
-    # Get final predictions to calculate accuracy
-    final_predictions = model(inputs)
-    final_predictions = np.where(final_predictions > 0.5, 1, 0)
-    accuracy = 1 - (final_predictions - targets) / len(targets) 
+        pred = model(inputs)
+        loss = MSE_loss(pred, targets)
     
-    print(f"Total accuracy: {accuracy}")
-    
-    # plt.scatter(inputs[:, 0], inputs[:, 1], c=final_predictions[:, 0] > 0.5)
-    # plt.show()
+    loss_wrt_W, loss_wrt_b = tape.gradient(loss, [W, b])
+    W.assign_sub(step_size * loss_wrt_W)
+    b.assign_sub(step_size * loss_wrt_b)
 
-# Run SGD
-SGD(inputs, targets, 0.1, 50)
+    print(f"Loss at {step_num} :: {loss}")
 
-# Plot results
-x = np.linspace(-1, 4, 100)
-y = (-W[0] / W[1]) * x + (0.5 - bias) / W[1] 
+# Run optimization
+for step in range(40):
+    SGD_single_step(inputs, targets, step)
 
-final_predictions = model(inputs)
-final_predictions = np.where(final_predictions > 0.5, 1, 0)
-plt.plot(x, y, "-r")
-plt.scatter(inputs[:, 0], inputs[:, 1], c=final_predictions[:, 0] > 0.5)
-plt.show()
+# Get accuracy
+final_results = model(inputs)
+final_results = np.where(final_results > 0.5, 1, 0)
+print(targets)
+print(final_results)
+accuracy = 1 - sum(abs(final_results - targets)) / len(targets)
+print(f"Total accuracy: {accuracy[0]}")
+
